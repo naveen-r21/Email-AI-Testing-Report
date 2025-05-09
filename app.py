@@ -381,11 +381,11 @@ def initialize_session_state():
         'has_results': False,
         'threads': [],
         'active_tab': None,
-        'gemini_api_key': os.getenv("GEMINI_API_KEY", ""), # Changed
-        'ms_graph_client_id': os.getenv("MS_GRAPH_CLIENT_ID", ""), # Added
-        'ms_graph_client_secret': os.getenv("MS_GRAPH_CLIENT_SECRET", ""), # Added
-        'ms_graph_tenant_id': os.getenv("MS_GRAPH_TENANT_ID", ""), # Added
-        'user_email_address': os.getenv("USER_EMAIL", ""), # Added (using 'user_email_address' for session key)
+        'gemini_api_key': os.getenv("GEMINI_API_KEY", ""),
+        'ms_graph_client_id': os.getenv("MS_GRAPH_CLIENT_ID", ""),
+        'ms_graph_client_secret': os.getenv("MS_GRAPH_CLIENT_SECRET", ""),
+        'ms_graph_tenant_id': os.getenv("MS_GRAPH_TENANT_ID", ""),
+        'user_email_address': os.getenv("USER_EMAIL", ""),
         'current_page': 1,
         'items_per_page': 5,
         'selected_thread': None,
@@ -945,18 +945,11 @@ def clean_email_content_with_gemini(email_body: str) -> str:
             
         # Try Gemini as a fallback
         try:
-            # genai.configure(api_key="AIzaSyBQvoDZev2oOWPg0TEuvSUliKgSj91htjg")  # Updated API key
-            # model = genai.GenerativeModel('gemini-1.5-pro')
-            
             # --- MODIFIED SECTION for Gemini API Key ---
             api_key_to_use = st.session_state.get("gemini_api_key")
             if not api_key_to_use:
                 print("Error: Gemini API Key not configured in session state for clean_email_content_with_gemini.")
-                # Fallback to basic cleaning if API key is missing
-                cleaned_content = basic_clean(email_body) # Assuming basic_clean is defined or accessible
-                # If basic_clean is not accessible here, define it or use a simpler fallback:
-                # cleaned_content = re.sub(r'<[^>]+>', ' ', email_body) # Basic HTML strip
-                # cleaned_content = re.sub(r'\\s+', ' ', cleaned_content).strip()
+                cleaned_content = basic_clean(email_body) 
                 return cleaned_content
 
             genai.configure(api_key=api_key_to_use)
@@ -1740,12 +1733,6 @@ with st.sidebar:
     
     # API Settings Expander
     with st.expander("⚙️ API Settings", expanded=True):
-        # client_id = st.text_input("MS Graph Client ID", value="d86f5a18-67fe-4f37-b879-f7d9724fd59b", type="password")
-        # client_secret = st.text_input("MS Graph Client Secret", value="yjB8Q~HHKDetnRdfCcY24JnrE3qHqUKjKYKl3aiJ", type="password")
-        # tenant_id = st.text_input("MS Graph Tenant ID", value="094d25ba-3306-4bc2-b789-6eb55f87b309", type="password")
-        # user_email = st.text_input("User Email", value="naveen.r@optisolbusiness.com")
-        # gemini_api_key = st.text_input("Gemini API Key", value="AIzaSyBMVP5wfR0R6LBLP_Tbbiaiudnaccau2IA", type="password")
-
         # --- MODIFIED SECTION for Sidebar Inputs ---
         st.session_state.ms_graph_client_id = st.text_input(
             "MS Graph Client ID", 
@@ -1781,13 +1768,8 @@ with st.sidebar:
         )
         # --- END MODIFIED SECTION ---
         
-        # Store Gemini API key in session state so it's accessible to all functions
-        # st.session_state["gemini_api_key"] = gemini_api_key # This is now done directly above
-        
         # Save settings button
         if st.button("Save Settings"):
-            # Settings are now live-updated in session_state as they are typed.
-            # This button can provide user feedback or perform other save-related actions if needed in the future.
             st.success("Settings are actively updated from your inputs and environment variables!")
     
     # Help section
@@ -1872,8 +1854,6 @@ with tab1:
     if fetch_button:
         with st.spinner("Fetching email threads..."):
             try:
-                # Get access token using the client
-                # graph_client = GraphAPIClient(client_id, client_secret, tenant_id) # Old way
                 # --- MODIFIED SECTION for GraphAPIClient Instantiation ---
                 client_id_to_use = st.session_state.get('ms_graph_client_id')
                 client_secret_to_use = st.session_state.get('ms_graph_client_secret')
@@ -1889,7 +1869,6 @@ with tab1:
                 if not access_token:
                     st.error('Failed to get access token. Check your credentials.')
                 else:
-                    # Get and filter threads
                     # --- MODIFIED SECTION for user_email in fetch_threads ---
                     user_email_to_use = st.session_state.get('user_email_address')
                     if not user_email_to_use:
@@ -2026,8 +2005,6 @@ with tab1:
                             print(f"Thread conversation_ids: {selected_thread['conversation_ids']}")
                         print("==================================================")
                         
-                        # Get access token
-                        # graph_client = GraphAPIClient(client_id, client_secret, tenant_id) # Old way
                         # --- MODIFIED SECTION for GraphAPIClient Instantiation ---
                         client_id_to_use_process = st.session_state.get('ms_graph_client_id')
                         client_secret_to_use_process = st.session_state.get('ms_graph_client_secret')
@@ -2229,18 +2206,13 @@ with tab1:
                                             # Try to get full email content
                                             try:
                                                 print(f"Fetching full email content for ID: {email['id']}")
+                                                # --- MODIFIED SECTION for user_email in _get_email_with_body ---
                                                 user_email_for_refetch = st.session_state.get('user_email_address')
                                                 if not user_email_for_refetch:
                                                     print("Error: User email not found in session state for re-fetching email body.")
                                                 else:
                                                     email = graph_client._get_email_with_body(user_email_for_refetch, email['id'])
-                                                    # --- DEBUG PRINT ADDED ---
-                                                    print(f"DEBUG: Email {idx+1} keys AFTER body re-fetch attempt: {list(email.keys()) if isinstance(email, dict) else 'Not a dict'}")
-                                                    if isinstance(email, dict) and email.get('body', {}).get('content'):
-                                                        print(f"DEBUG: Email {idx+1} body content found AFTER re-fetch.")
-                                                    else:
-                                                        print(f"DEBUG: Email {idx+1} body content STILL MISSING after re-fetch.")
-                                                    # --- END DEBUG PRINT ---
+                                                # --- END MODIFIED SECTION ---
                                                 print(f"Successfully fetched full email content (or attempt made)")
                                             except Exception as e:
                                                 print(f"Error fetching full email: {str(e)}")
