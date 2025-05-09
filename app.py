@@ -1947,7 +1947,7 @@ if selected_option == "Upload emails as Excel":
     st.subheader("Process Emails from Excel File")
     
     # Instructions for users
-    st.info("Please upload an Excel file containing email content. The file must have a column named 'Email Content'.")
+    #st.info("Please upload an Excel file containing email content. The file must have a column named 'Email Content'.")
     
     # File uploader
     uploaded_file = st.file_uploader(
