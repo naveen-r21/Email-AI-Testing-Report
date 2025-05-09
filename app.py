@@ -386,6 +386,7 @@ def initialize_session_state():
         'ms_graph_client_secret': os.getenv("MS_GRAPH_CLIENT_SECRET", ""),
         'ms_graph_tenant_id': os.getenv("MS_GRAPH_TENANT_ID", ""),
         'user_email_address': os.getenv("USER_EMAIL", ""),
+        'email_source': "Upload emails as Excel",  # Changed default
         'current_page': 1,
         'items_per_page': 5,
         'selected_thread': None,
@@ -1731,46 +1732,51 @@ with st.sidebar:
     st.title("Email Analysis Pipeline")
     st.markdown("---")
     
-    # API Settings Expander
-    with st.expander("⚙️ API Settings", expanded=True):
-        # --- MODIFIED SECTION for Sidebar Inputs ---
-        st.session_state.ms_graph_client_id = st.text_input(
-            "MS Graph Client ID", 
-            value=st.session_state.get('ms_graph_client_id', ""), 
-            type="password"
-        )
-        st.session_state.ms_graph_client_secret = st.text_input(
-            "MS Graph Client Secret", 
-            value=st.session_state.get('ms_graph_client_secret', ""), 
-            type="password"
-        )
-        st.session_state.ms_graph_tenant_id = st.text_input(
-            "MS Graph Tenant ID", 
-            value=st.session_state.get('ms_graph_tenant_id', ""), 
-            type="password"
-        )
-        # --- DEBUG PRINT ADDED ---
-        sidebar_user_email = st.session_state.get('user_email_address', "<NOT_IN_SESSION_OR_EMPTY>")
-        print(f"DEBUG: In sidebar, user_email_address from session_state before input: '{sidebar_user_email}'")
-        # --- END DEBUG PRINT ---
-        st.session_state.user_email_address = st.text_input(
-            "User Email", 
-            value=sidebar_user_email # Use the pre-fetched value
-        )
-        # --- DEBUG PRINT ADDED ---
-        sidebar_gemini_key = st.session_state.get('gemini_api_key', "<NOT_IN_SESSION_OR_EMPTY>")
-        print(f"DEBUG: In sidebar, gemini_api_key from session_state before input: '{sidebar_gemini_key}'")
-        # --- END DEBUG PRINT ---
+    # Gemini API Key Section
+    with st.expander("🔑 Gemini API Key", expanded=True):
         st.session_state.gemini_api_key = st.text_input(
             "Gemini API Key", 
-            value=sidebar_gemini_key, # Use the pre-fetched value
+            value=st.session_state.get('gemini_api_key', ""), 
             type="password"
         )
-        # --- END MODIFIED SECTION ---
-        
-        # Save settings button
-        if st.button("Save Settings"):
-            st.success("Settings are actively updated from your inputs and environment variables!")
+        st.markdown("""
+        <div style="background-color: #2D2D2D; padding: 10px; border-radius: 4px;">
+            <p style="color: #E0E0E0; font-size: 14px;">
+                <strong>Usage:</strong>
+                <ol>
+                    <li>Get your Gemini API key from <a href="https://makersuite.google.com/app/apikey" target="_blank" style="color: #88CCF1;">Google MakerSuite</a></li>
+                    <li>Enter the key here and click "Save API Key"</li>
+                </ol>
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Save API Key"):
+            st.success("Gemini API Key saved successfully!")
+    
+    # Outlook Credentials Section - Only show when Outlook option is selected
+    if st.session_state.email_source == "Fetch emails from Outlook":
+        with st.expander("📧 Outlook Credentials", expanded=True):
+            st.session_state.ms_graph_client_id = st.text_input(
+                "MS Graph Client ID", 
+                value=st.session_state.get('ms_graph_client_id', ""),
+                type="password"
+            )
+            st.session_state.ms_graph_client_secret = st.text_input(
+                "MS Graph Client Secret", 
+                value=st.session_state.get('ms_graph_client_secret', ""), 
+                type="password"
+            )
+            st.session_state.ms_graph_tenant_id = st.text_input(
+                "MS Graph Tenant ID", 
+                value=st.session_state.get('ms_graph_tenant_id', ""), 
+                type="password"
+            )
+            st.session_state.user_email_address = st.text_input(
+                "User Email", 
+                value=st.session_state.get('user_email_address', "")
+            )
+            if st.button("Save Outlook Settings"):
+                st.success("Outlook settings saved successfully!")
     
     # Help section
     with st.expander("📚 How to Use This Tool", expanded=False):
@@ -1809,881 +1815,806 @@ with tab1:
     # Remove the Email Fetching header
     # st.header("Email Fetching")
     
-    # Initialize session state for this tab if needed
-    if 'threads' not in st.session_state:
-        st.session_state.threads = []
-    
-    # Remove the API Key input field
-    # gemini_api_key = st.text_input(
-    #     "Enter your Gemini API Key",
-    #     value=st.session_state.get('gemini_api_key', ''),
-    #     type="password"
-    # )
-    # if gemini_api_key:
-    #     st.session_state.gemini_api_key = gemini_api_key
-    
-    # Filters section
-    st.markdown('<div class="filter-container">', unsafe_allow_html=True)
-    st.subheader("Email Filters")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        from_filter = st.text_input("From (Sender Email)", value="nraman@dwellworks.com")
-        to_filter = st.text_input("To (Recipient Email)")
-    
-    with col2:
-        subject_filter = st.text_input("Subject Contains")
-        use_date_from = st.checkbox("Enable From Date filter")
-        if use_date_from:
-            date_from = st.date_input("From Date", value=datetime.now() - timedelta(days=7))
-        else:
-            date_from = None
-        use_date_to = st.checkbox("Enable To Date filter")
-        if use_date_to:
-            date_to = st.date_input("To Date", value=datetime.now())
-        else:
-            date_to = None
-
-    # Fetch threads button
-    fetch_button = st.button("Fetch Email Threads", key="fetch_threads_btn")
-    
-    # Close the filter-container div
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    if fetch_button:
-        with st.spinner("Fetching email threads..."):
-            try:
-                # --- MODIFIED SECTION for GraphAPIClient Instantiation ---
-                client_id_to_use = st.session_state.get('ms_graph_client_id')
-                client_secret_to_use = st.session_state.get('ms_graph_client_secret')
-                tenant_id_to_use = st.session_state.get('ms_graph_tenant_id')
-                
-                if not all([client_id_to_use, client_secret_to_use, tenant_id_to_use]):
-                    st.error("MS Graph API credentials are not fully configured in settings. Please check the sidebar.")
-                    st.stop()
-                graph_client = GraphAPIClient(client_id_to_use, client_secret_to_use, tenant_id_to_use)
-                # --- END MODIFIED SECTION ---
-                access_token = graph_client.get_access_token()
-                
-                if not access_token:
-                    st.error('Failed to get access token. Check your credentials.')
-                else:
-                    # --- MODIFIED SECTION for user_email in fetch_threads ---
-                    user_email_to_use = st.session_state.get('user_email_address')
-                    if not user_email_to_use:
-                        st.error("User email is not configured in settings. Please check the sidebar.")
-                        st.stop()
-                    # --- END MODIFIED SECTION ---
-                    thread_list, error = fetch_threads(
-                        graph_client,
-                        user_email_to_use, # Changed from user_email
-                        from_email=from_filter if from_filter else None,
-                        to_email=to_filter if to_filter else None,
-                        subject_contains=subject_filter if subject_filter else None,
-                        date_from=date_from if use_date_from else None,
-                        date_to=date_to if use_date_to else None
-                    )
-                    
-                    if error:
-                        st.error(error)
-                    elif thread_list:
-                        # Store in session state
-                        st.session_state.threads = thread_list
-                        total_messages = sum(t['message_count'] for t in thread_list)
-                        st.success(f"Found {len(thread_list)} email threads containing {total_messages} total messages!")
-                    else:
-                        st.warning("No email threads found matching the specified filters.")
-                        
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
-                print(f"Error details: {traceback.format_exc()}")
-
-    # Display threads in selectbox for user selection (moved outside the fetch button block)
-    thread_options = []
-    thread_labels = {}
-    
-    if 'threads' in st.session_state and st.session_state.threads:
-        for thread in st.session_state.threads:
-            # Format as "[Subject] (Count: X emails)"
-            label = f"{thread['subject']} (Count: {thread['message_count']} emails)"
-            thread_labels[label] = thread
-            thread_options.append(label)
+    # --- START: Email Source Selection ---
+    # Set up default selection if needed
+    if "email_source" not in st.session_state:
+        st.session_state.email_source = "Upload emails as Excel"  # Default option matches session state init
         
-        selected_thread_label = st.selectbox(
-            "Select Email Thread to Process:",
-            options=thread_options,
-            index=0 if thread_options else None
+    # Create a callback function to handle radio button changes
+    def handle_radio_change():
+        # This function will be called when the radio selection changes
+        pass  # We don't need to do anything here, the rerun below will handle the UI update
+    
+    # Display radio button for selection
+    selected_option = st.radio(
+        "Select Email Source:",
+        options=["Upload emails as Excel", "Fetch emails from Outlook"],
+        index=0 if st.session_state.email_source == "Upload emails as Excel" else 1,
+        key="email_source_radio_unique",  # Add unique key to prevent state conflicts
+        on_change=handle_radio_change,  # Add callback function
+        horizontal=True
+    )
+    
+    # Update session state and force rerun if selection changed
+    if selected_option != st.session_state.email_source:
+        st.session_state.email_source = selected_option
+        st.experimental_rerun()  # Force a rerun to update the UI
+    
+    # Separator
+    st.markdown("---")
+    
+    # --- Excel Upload Section ---
+    if selected_option == "Upload emails as Excel":
+        st.subheader("Process Emails from Excel File")
+        
+        # Instructions for users
+        st.info("Please upload an Excel file containing email content. The file must have a column named 'Email Content'.")
+        
+        # File uploader
+        uploaded_file = st.file_uploader(
+            "Upload an Excel file with an 'Email Content' column (.xlsx, .xls)",
+            type=["xlsx", "xls"],
+            key="excel_uploader"
         )
         
-        if not selected_thread_label:
-            st.info("No threads available. Please fetch emails first.")
-        else:
-            # Get the selected thread object
-            selected_thread = thread_labels[selected_thread_label]
-            
-            # Show thread details in a nice formatted box
-            st.markdown("### Thread Information")
-            
-            # Create two columns for thread info display
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown(f"**Subject:** {selected_thread['subject']}")
-                st.markdown(f"**Number of Emails:** {selected_thread['message_count']}")
-            
-            with col2:
-                st.markdown(f"**Thread ID:** {selected_thread['thread_id']}")
-                st.markdown(f"**Latest Activity:** {selected_thread['latest_message_date']}")
-            
-            # Show list of emails in thread with subjects and dates in a table
-            if selected_thread.get('messages'):
-                with st.expander("🔍 View Emails in Thread", expanded=False):
-                    if 'first_message' in selected_thread and 'latest_message' in selected_thread:
-                        # If we have the first and latest message objects, we can display them
-                        email_data = []
-                        
-                        # Add first message
-                        if isinstance(selected_thread['first_message'], dict):
-                            first_message = selected_thread['first_message']
-                            subject = first_message.get('subject', 'No Subject')
-                            clean_subject = get_clean_subject(subject)
-                            sender = first_message.get('from', {}).get('emailAddress', {})
-                            
-                            email_data.append({
-                                "Index": 1,
-                                "Subject": clean_subject,
-                                "From": sender.get('name', 'Unknown'),
-                                "Email": sender.get('address', 'unknown@example.com'),
-                                "Date": first_message.get('receivedDateTime', 'Unknown')
-                            })
-                        
-                        # Add latest message if different from first
-                        if (isinstance(selected_thread['latest_message'], dict) and 
-                            selected_thread['latest_message'].get('id') != selected_thread['first_message'].get('id')):
-                            latest_message = selected_thread['latest_message']
-                            subject = latest_message.get('subject', 'No Subject')
-                            clean_subject = get_clean_subject(subject)
-                            sender = latest_message.get('from', {}).get('emailAddress', {})
-                            
-                            email_data.append({
-                                "Index": 2,
-                                "Subject": clean_subject,
-                                "From": sender.get('name', 'Unknown'),
-                                "Email": sender.get('address', 'unknown@example.com'),
-                                "Date": latest_message.get('receivedDateTime', 'Unknown')
-                            })
-                        
-                        # Display available message info
-                        if email_data:
-                            emails_df = pd.DataFrame(email_data)
-                            st.dataframe(emails_df)
-                        else:
-                            st.info("No detailed message information available. Process the thread to see all messages.")
-                    else:
-                        # Handle the case where we only have message IDs
-                        message_ids = selected_thread.get('messages', [])
-                        if isinstance(message_ids, list) and message_ids:
-                            st.info(f"Thread contains {len(message_ids)} messages. Process the thread to see details.")
-                        else:
-                            st.info("No message details available. Process the thread to retrieve emails.")
-
-            # Process Thread button (moved outside the fetch block)
-            if st.button("Process Thread", type="primary"):
-                with st.spinner("Loading and analyzing email thread..."):
-                    try:
-                        # Add clear debugging information about the thread
-                        print("\n==================================================")
-                        print("THREAD PROCESSING DEBUG INFORMATION")
-                        print("==================================================")
-                        print(f"Thread ID: {selected_thread['thread_id']}")
-                        print(f"Thread Subject (Original): {selected_thread['subject']}")
-                        print(f"Thread Subject (Clean): {selected_thread['subject']}")
-                        print(f"Thread Message Count: {selected_thread['message_count']}")
-                        print(f"Thread has conversation_ids: {'conversation_ids' in selected_thread}")
-                        if 'conversation_ids' in selected_thread:
-                            print(f"Thread conversation_ids: {selected_thread['conversation_ids']}")
-                        print("==================================================")
-                        
-                        # --- MODIFIED SECTION for GraphAPIClient Instantiation ---
-                        client_id_to_use_process = st.session_state.get('ms_graph_client_id')
-                        client_secret_to_use_process = st.session_state.get('ms_graph_client_secret')
-                        tenant_id_to_use_process = st.session_state.get('ms_graph_tenant_id')
-
-                        if not all([client_id_to_use_process, client_secret_to_use_process, tenant_id_to_use_process]):
-                            st.error("MS Graph API credentials are not fully configured in settings for thread processing. Please check the sidebar.")
-                            st.stop()
-                        graph_client = GraphAPIClient(client_id_to_use_process, client_secret_to_use_process, tenant_id_to_use_process)
-                        # --- END MODIFIED SECTION ---
-                        access_token = graph_client.get_access_token()
+        if uploaded_file is not None:
+            # Show preview of file before processing
+            try:
+                preview_df = pd.read_excel(uploaded_file, nrows=3)
+                st.write("Preview of uploaded file:")
+                st.dataframe(preview_df)
+                
+                # Check if 'Email Content' column exists
+                if "Email Content" not in preview_df.columns:
+                    st.error("❌ The Excel file does not contain a column named 'Email Content'. Please check your file format.")
+                    column_names = list(preview_df.columns)
+                    st.write(f"Available columns: {', '.join(column_names)}")
+                else:
+                    st.success("✅ File uploaded successfully and 'Email Content' column found.")
                     
-                        if not access_token:
-                            st.error('Failed to get access token. Check your credentials.')
-                        else:
-                            # ADD THIS CHECK HERE:
-                            current_user_email = st.session_state.get('user_email_address')
-                            if not current_user_email:
-                                st.error("Processing halted: User Email is not configured in settings. Please check the sidebar.")
-                                st.stop() 
-
-                            # Debug info about the thread
-                            print("\n=== Debug: Processing Thread ===")
-                            print(f"Thread ID: {selected_thread['thread_id']}")
-                            print(f"Expected message count: {selected_thread['message_count']}")
+                    # Process button
+                    if st.button("Process Uploaded Excel", type="primary", key="process_excel_btn"):
+                        st.session_state.individual_results = []
+                        st.session_state.has_results = False
+                        st.session_state.thread_structure = None
                         
-                            # Clear any existing results
-                            st.session_state.individual_results = []
-                            st.session_state.has_results = False
-                            
-                            # Get thread messages - this should now include all emails in the normalized thread
-                            thread_emails = []
+                        with st.spinner("Processing uploaded Excel file..."):
                             try:
-                                # Get the thread ID of the selected thread
-                                thread_id = selected_thread['thread_id']
-                                print(f"Retrieving all emails for thread ID: {thread_id}")
+                                # Reset file pointer before reading again
+                                uploaded_file.seek(0)
+                                df = pd.read_excel(uploaded_file)
                                 
-                                # Check if we already have message IDs
-                                message_ids = selected_thread.get('messages', [])
-                                if message_ids and isinstance(message_ids, list):
-                                    print(f"Thread has {len(message_ids)} message IDs, fetching full messages")
-                                    thread_emails = []
-                                    
-                                    # Fetch each message by ID
-                                    for msg_id in message_ids:
-                                        try:
-                                            if isinstance(msg_id, str):
-                                                # --- MODIFIED SECTION for user_email in _get_email_with_body ---
-                                                user_email_for_fetch = st.session_state.get('user_email_address')
-                                                if not user_email_for_fetch:
-                                                    print("Error: User email not found in session state for _get_email_with_body")
-                                                    # Potentially skip this message or handle error
-                                                    continue 
-                                                full_msg = graph_client._get_email_with_body(user_email_for_fetch, msg_id)
-                                                # --- END MODIFIED SECTION ---
-                                                if full_msg:
-                                                    thread_emails.append(full_msg)
-                                        except Exception as e:
-                                            print(f"Error fetching message {msg_id}: {str(e)}")
-                                    
-                                    # Create a minimal thread structure
-                                    if thread_emails:
-                                        thread_structure = []
-                                        # Sort by date
-                                        thread_emails.sort(key=lambda e: e.get('receivedDateTime', ''))
-                                        # Add first email as root
-                                        if thread_emails:
-                                            root = thread_emails[0].copy()
-                                            root['replies'] = []
-                                            thread_structure.append(root)
-                                            # Add other emails as replies to root
-                                            for email in thread_emails[1:]:
-                                                root['replies'].append(email)
-                                        
-                                        # Store thread structure
-                                        st.session_state.thread_structure = thread_structure
-                                else:
-                                    # Try using the improved fetch_thread_messages method 
-                                    # if we don't have message IDs
-                                    # --- MODIFIED SECTION for user_email in fetch_thread_messages ---
-                                    user_email_for_thread_msgs = st.session_state.get('user_email_address')
-                                    if not user_email_for_thread_msgs:
-                                        st.error("User email not configured for fetching thread messages.")
-                                        st.stop()
-                                    thread_result = graph_client.fetch_thread_messages(user_email_for_thread_msgs, thread_id)
-                                    # --- END MODIFIED SECTION ---
-                                    
-                                    # Extract the messages and thread structure from the result
-                                    if isinstance(thread_result, dict):
-                                        thread_emails = thread_result.get('messages', [])
-                                        thread_structure = thread_result.get('thread_structure', [])
-                                        
-                                        if thread_emails:
-                                            print(f"Retrieved {len(thread_emails)} messages in thread")
-                                            
-                                            # Store thread structure for visualization
-                                            st.session_state.thread_structure = thread_structure
-                                        else:
-                                            print("No emails found in the thread result")
-                                    else:
-                                        print(f"Unexpected result type from fetch_thread_messages: {type(thread_result)}")
-                                        thread_emails = []
-                                        thread_structure = []
+                                if "Email Content" not in df.columns:
+                                    st.error("Excel file must contain a column named 'Email Content'. Please check the file and try again.")
+                                    st.stop()
                                 
-                                # Check if we have any emails from the fetch operations
-                                if not thread_emails:
-                                    print("No emails retrieved. Trying to use first_message and latest_message if available")
-                                    # Try using the first_message and latest_message if available
-                                    if isinstance(selected_thread.get('first_message'), dict):
-                                        first_msg = selected_thread['first_message']
-                                        if 'id' in first_msg and first_msg not in thread_emails:
-                                            thread_emails.append(first_msg)
-                                            
-                                        if isinstance(selected_thread.get('latest_message'), dict):
-                                            latest_msg = selected_thread['latest_message']
-                                            if 'id' in latest_msg and latest_msg not in thread_emails:
-                                                # Check if this is not the same as first_message
-                                                if not thread_emails or thread_emails[0].get('id') != latest_msg.get('id'):
-                                                    thread_emails.append(latest_msg)
-                            
-                                # Verify thread emails is a list and contains valid elements
-                                if not isinstance(thread_emails, list):
-                                    print(f"Error: thread_emails is not a list, it's a {type(thread_emails)}")
-                                    thread_emails = []
-                                elif len(thread_emails) == 0:
-                                    print("Warning: No emails found in thread")
-                                else:
-                                    print(f"Retrieved {len(thread_emails)} emails for processing")
-                                    # Debug print first email structure
-                                    print(f"First email keys: {list(thread_emails[0].keys())}")
-                        
-                            except Exception as e:
-                                print(f"Error getting thread emails: {str(e)}")
-                                import traceback
-                                traceback.print_exc()
-                            
-                            if thread_emails:
-                                # Sort emails by date
-                                thread_emails.sort(key=lambda e: e.get('receivedDateTime', ''))
-                                print(f"\nProcessing {len(thread_emails)} emails in thread")
+                                email_bodies_from_excel = df["Email Content"].dropna().astype(str).tolist()
                                 
-                                # Display thread structure if available
-                                if 'thread_structure' in st.session_state:
-                                    with st.expander("📧 View Email Thread Structure"):
-                                        st.write("Thread structure based on message IDs and reply relationships:")
-                                        
-                                        def display_thread_node(node, level=0):
-                                            """Recursively display thread node with indentation"""
-                                            # Extract sender info and subject
-                                            sender = node.get('from', {}).get('emailAddress', {}).get('address', 'Unknown')
-                                            subject = node.get('subject', 'No Subject')
-                                            date = node.get('receivedDateTime', '').split('T')[0]
-                                            
-                                            # Display this message with proper indentation
-                                            st.markdown(f"{'&nbsp;' * (level * 4)}🔹 **{sender}** - {subject} ({date})")
-                                            
-                                            # Display all replies to this message
-                                            for reply in node.get('replies', []):
-                                                display_thread_node(reply, level + 1)
-                                        
-                                        # Display each thread root
-                                        for root in st.session_state.thread_structure:
-                                            display_thread_node(root)
+                                if not email_bodies_from_excel:
+                                    st.warning("No email content found in the 'Email Content' column or column is empty.")
+                                    st.stop()
                                 
-                                # Show debug info about the emails
-                                print("\nThread Email Details:")
-                                for i, email in enumerate(thread_emails):
-                                    print(f"Email {i+1}:")
-                                    print(f"  Subject: {email.get('subject', 'No Subject')}")
-                                    print(f"  From: {email.get('from', {}).get('emailAddress', {}).get('address', 'Unknown')}")
-                                    print(f"  Date: {email.get('receivedDateTime', 'Unknown')}")
-                                    print(f"  Has body: {'body' in email and bool(email['body'].get('content'))}")
-                                
-                                # Process emails
-                                results = []
+                                results_list = []
                                 previous_summary = ""
                                 
-                                progress_bar = st.progress(0)
-                                status_text = st.empty()
-                                error_placeholder = st.empty()
-                                has_rate_limit_error = False
+                                # Initialize AI service for processing
+                                try:
+                                    ai_service = AIService()
+                                except Exception as ai_init_error:
+                                    st.error(f"Failed to initialize AI service: {str(ai_init_error)}")
+                                    st.stop()
                                 
-                                for idx, email in enumerate(thread_emails):
-                                    progress = (idx + 1) / len(thread_emails)
-                                    progress_bar.progress(progress, text=f"Processing email {idx + 1} of {len(thread_emails)}...")
+                                progress_bar_excel = st.progress(0)
+                                status_message = st.empty()
+                                
+                                for idx, email_body in enumerate(email_bodies_from_excel):
+                                    progress_excel = (idx + 1) / len(email_bodies_from_excel)
+                                    progress_bar_excel.progress(progress_excel, text=f"Processing email {idx + 1} of {len(email_bodies_from_excel)} from Excel...")
+                                    status_message.info(f"Processing email {idx + 1}...")
                                     
-                                    print(f"\n=== Processing email {idx + 1} ===")
-                                    print(f"Subject: {email.get('subject', 'No Subject')}")
-                                    print(f"From: {email.get('from', {}).get('emailAddress', {}).get('address', 'Unknown')}")
-                                    print(f"Previous summary: {previous_summary[:100]}...")
+                                    current_time_iso = datetime.now().isoformat() + "Z"
+                                    mock_email_object = {
+                                        "id": f"excel_email_{idx + 1}",
+                                        "conversationId": "excel_upload_thread_01",
+                                        "subject": f"Email {idx + 1} from Excel Upload",
+                                        "body": {"content": email_body, "contentType": "text"},
+                                        "from": {"emailAddress": {"name": "Excel Upload", "address": "excel@example.com"}},
+                                        "sender": {"emailAddress": {"name": "Excel Upload", "address": "excel@example.com"}},
+                                        "toRecipients": [],
+                                        "ccRecipients": [],
+                                        "bccRecipients": [],
+                                        "receivedDateTime": current_time_iso,
+                                        "inferenceClassification": "focused",
+                                        "parentFolderId": "mock_folder_id",
+                                        "isDraft": False,
+                                        "isRead": True
+                                    }
+                                    
+                                    current_gemini_api_key_excel = st.session_state.get("gemini_api_key")
+                                    if current_gemini_api_key_excel:
+                                        import google.generativeai as genai
+                                        genai.configure(api_key=current_gemini_api_key_excel)
+                                    else:
+                                        status_message.warning("No Gemini API key found. Processing may fail if API access is needed.")
                                     
                                     try:
-                                        # --- DEBUG PRINT ADDED ---
-                                        print(f"DEBUG: Email {idx+1} keys before body check: {list(email.keys()) if isinstance(email, dict) else 'Not a dict'}")
-                                        # --- END DEBUG PRINT ---
-                                        # Ensure email has required fields
-                                        if not email.get('body', {}).get('content'):
-                                            print(f"Warning: Email {idx + 1} has no body content initially. Attempting to fetch full email.")
-                                            # Try to get full email content
-                                            try:
-                                                print(f"Fetching full email content for ID: {email['id']}")
-                                                # --- MODIFIED SECTION for user_email in _get_email_with_body ---
-                                                user_email_for_refetch = st.session_state.get('user_email_address')
-                                                if not user_email_for_refetch:
-                                                    print("Error: User email not found in session state for re-fetching email body.")
-                                                else:
-                                                    email = graph_client._get_email_with_body(user_email_for_refetch, email['id'])
-                                                # --- END MODIFIED SECTION ---
-                                                print(f"Successfully fetched full email content (or attempt made)")
-                                            except Exception as e:
-                                                print(f"Error fetching full email: {str(e)}")
+                                        result = process_individual_email(mock_email_object, ai_service, previous_summary)
                                         
-                                        # --- DEBUG PRINT ADDED ---
-                                        has_content = isinstance(email, dict) and email.get('body', {}).get('content')
-                                        print(f"DEBUG: Email {idx+1} - Final check for body content: {bool(has_content)}")
-                                        if not isinstance(email, dict):
-                                            print(f"DEBUG: Email {idx+1} is not a dict.")
-                                        elif not email.get('body'):
-                                            print(f"DEBUG: Email {idx+1} has no 'body' key.")
-                                        elif not email.get('body',{}).get('content'):
-                                            print(f"DEBUG: Email {idx+1} has 'body' but no 'content' or content is empty.")
-                                        # --- END DEBUG PRINT ---
-
-                                        if email and email.get('body', {}).get('content'):
-                                            # Process this individual email with the previous summary
-                                            print(f"Processing email {idx + 1} with context from previous emails")
-                                            print(f"Previous summary being used: {previous_summary}")
-                                            
-                                            # Initialize AI service with the Gemini API key
-                                            from ai_service import AIService
-                                            # For Dwellworks API, the API key is not required
-                                            # But for Gemini, we'll configure it with key from the sidebar
-                                            import google.generativeai as genai
-
-                                            # Fetch Gemini API key from session state
-                                            current_gemini_api_key = st.session_state.get("gemini_api_key")
-
-                                            if current_gemini_api_key:
-                                                genai.configure(api_key=current_gemini_api_key)
-                                                print("DEBUG: Configured genai with API key from session state for thread processing.")
+                                        if result:
+                                            result["email_index"] = idx + 1
+                                            results_list.append(result)
+                                            if isinstance(result.get("ai_output"), dict) and "Summary" in result["ai_output"]:
+                                                previous_summary = result["ai_output"]["Summary"]
                                             else:
-                                                print("DEBUG: Gemini API key not found in session state for thread processing. Genai not configured by this block.")
-                                            
-                                            ai_service = AIService() # AIService might have its own Gemini key handling
-                                            
-                                            result = process_individual_email(email, ai_service, previous_summary)
-                                            if result:
-                                                print(f"Email {idx + 1} processed successfully")
-                                                result["email_index"] = idx + 1
-                                                results.append(result)
-                                                
-                                                # Extract summary for next email
-                                                if isinstance(result.get("ai_output"), dict) and "Summary" in result["ai_output"]:
-                                                    previous_summary = result["ai_output"]["Summary"]
-                                                    print(f"Updated previous_summary to: {previous_summary}")
+                                                raw_ai_summary = result.get("ai_output", {}).get("Summary", result.get("ai_output", {}).get("summary"))
+                                                if raw_ai_summary:
+                                                    previous_summary = raw_ai_summary
                                                 else:
-                                                    print("Warning: Could not extract summary from AI output")
-                                                
-                                                if isinstance(result.get("ai_output"), dict) and result["ai_output"].get("error"):
-                                                    has_rate_limit_error = True
-                                                    print(f"Warning: Rate limit error in email {idx + 1}")
-                                        else:
-                                            print(f"Error: Could not get content for email {idx + 1}")
-                                            
-                                    except Exception as e:
-                                        print(f"Error processing email {idx + 1}: {str(e)}")
-                                        import traceback
-                                        traceback.print_exc()
+                                                    previous_summary = ""
+                                    except Exception as email_process_error:
+                                        status_message.error(f"Error processing email {idx + 1}: {str(email_process_error)}")
+                                        # Continue with next email instead of stopping entirely
                                 
-                                # Complete progress
-                                progress_bar.empty()
-                                status_text.empty()
+                                progress_bar_excel.empty()
+                                status_message.empty()
                                 
-                                print("\n=== Results Summary ===")
-                                print(f"Total emails processed: {len(results)}")
-                                
-                                # Store results using our helper function
-                                if results:
-                                    print("\nAttempting to store results...")
-                                    ensure_results_tab_works(results)
-                                    
-                                    # Verify results were stored
+                                if results_list:
+                                    ensure_results_tab_works(results_list)
                                     if 'individual_results' in st.session_state and len(st.session_state.individual_results) > 0:
-                                        print("Results successfully stored in session state")
-                                        
-                                        if has_rate_limit_error:
-                                            error_placeholder.error("⚠️ Some emails could not be processed due to API rate limits. Results shown may be incomplete.")
-                                        else:
-                                            st.success(f"Successfully analyzed {len(results)} emails! View results in the 'Results & Reports' tab.")
-                                            
-                                            # Add a button to go to results tab
-                                            if st.button("Go to Results Tab"):
-                                                st.session_state.active_tab = "Detailed Evaluation" # Corrected name
-                                                st.experimental_rerun()
+                                        st.success(f"Successfully analyzed {len(st.session_state.individual_results)} emails from the Excel file! View results in the 'Detailed Evaluation' tab.")
+                                        if st.button("Go to Detailed Evaluation Tab", key="goto_results_excel"):
+                                            st.session_state.active_tab = "Detailed Evaluation"
+                                            st.experimental_rerun()
                                     else:
-                                        print("Warning: Results may not have been stored properly")
-                                        st.error("Error: Results were not stored properly. Please try again.")
+                                        st.error("Error: Results from Excel were processed but not stored properly. Please try again or check logs.")
                                 else:
-                                    st.error("No results to store. This may be due to missing User Email in settings or issues fetching email content.")
-                    except Exception as e:
-                        st.error(f"An error occurred while processing the thread: {e}")
-                        import traceback
-                        print("Error details:")
-                        print(traceback.format_exc())
+                                    st.warning("No results were generated from the Excel file. This could be due to empty content or processing errors for all rows.")
+                            
+                            except Exception as e:
+                                st.error(f"An error occurred while processing the Excel file: {str(e)}")
+                                import traceback
+                                print("Error details from Excel processing:")
+                                print(traceback.format_exc())
+            except Exception as e:
+                st.error(f"Error previewing Excel file: {str(e)}")
+        else:
+            st.info("Please upload an Excel file to start processing.")
+        
+        # Sample excel format information
+        with st.expander("ℹ️ Excel File Format Information"):
+            st.markdown("""
+            **Required Excel Format:**
             
-            # Display results in an expander if available
-            has_results = (
-                'individual_results' in st.session_state 
-                and isinstance(st.session_state.individual_results, list)
-                and len(st.session_state.individual_results) > 0
+            Your Excel file should contain at least one column named exactly "Email Content" with each cell containing the content of a different email.
+            
+            **Example:**
+            
+            | Email Content |
+            |---------------|
+            | Dear John, I am writing to confirm our meeting tomorrow at 2pm... |
+            | Hi Team, Please find attached the latest project report... |
+            
+            Additional columns will be ignored during processing.
+            """)
+            
+            # Add sample Excel download option
+            sample_data = {'Email Content': [
+                'Dear John, I am writing to confirm our meeting tomorrow at 2pm. Looking forward to discussing the project progress.',
+                'Hi Team, Please find attached the latest project report. We have made significant progress on the Phase 1 deliverables.'
+            ]}
+            sample_df = pd.DataFrame(sample_data)
+            sample_buffer = BytesIO()
+            with pd.ExcelWriter(sample_buffer, engine='xlsxwriter') as writer:
+                sample_df.to_excel(writer, index=False, sheet_name='Sample')
+            
+            st.download_button(
+                label="Download Sample Excel File",
+                data=sample_buffer.getvalue(),
+                file_name="sample_email_content.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+    
+    # --- Outlook Fetching Section ---
+    elif selected_option == "Fetch emails from Outlook":
+        st.subheader("Outlook Email Processing")
+        
+        # Filters section
+        st.markdown('<div class="filter-container">', unsafe_allow_html=True)
+        st.subheader("Email Filters")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            #from_filter = st.text_input("From (Sender Email)", value="nraman@dwellworks.com")
+            from_filter = st.text_input("From (Sender Email)")
+            to_filter = st.text_input("To (Recipient Email)")
+        
+        with col2:
+            subject_filter = st.text_input("Subject Contains")
+            use_date_from = st.checkbox("Enable From Date filter")
+            if use_date_from:
+                date_from = st.date_input("From Date", value=datetime.now() - timedelta(days=7))
+            else:
+                date_from = None
+            use_date_to = st.checkbox("Enable To Date filter")
+            if use_date_to:
+                date_to = st.date_input("To Date", value=datetime.now())
+            else:
+                date_to = None
+
+        # Fetch threads button
+        fetch_button = st.button("Fetch Email Threads", key="fetch_threads_btn")
+        
+        # Close the filter-container div
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        if fetch_button:
+            with st.spinner("Fetching email threads..."):
+                try:
+                    # --- MODIFIED SECTION for GraphAPIClient Instantiation ---
+                    client_id_to_use = st.session_state.get('ms_graph_client_id')
+                    client_secret_to_use = st.session_state.get('ms_graph_client_secret')
+                    tenant_id_to_use = st.session_state.get('ms_graph_tenant_id')
+                    
+                    if not all([client_id_to_use, client_secret_to_use, tenant_id_to_use]):
+                        st.error("MS Graph API credentials are not fully configured in settings. Please check the sidebar.")
+                        st.stop()
+                    graph_client = GraphAPIClient(client_id_to_use, client_secret_to_use, tenant_id_to_use)
+                    # --- END MODIFIED SECTION ---
+                    access_token = graph_client.get_access_token()
+                    
+                    if not access_token:
+                        st.error('Failed to get access token. Check your credentials.')
+                    else:
+                        # --- MODIFIED SECTION for user_email in fetch_threads ---
+                        user_email_to_use = st.session_state.get('user_email_address')
+                        if not user_email_to_use:
+                            st.error("User email is not configured in settings. Please check the sidebar.")
+                            st.stop()
+                        # --- END MODIFIED SECTION ---
+                        thread_list, error = fetch_threads(
+                            graph_client,
+                            user_email_to_use, # Changed from user_email
+                            from_email=from_filter if from_filter else None,
+                            to_email=to_filter if to_filter else None,
+                            subject_contains=subject_filter if subject_filter else None,
+                            date_from=date_from if use_date_from else None,
+                            date_to=date_to if use_date_to else None
+                        )
+                        
+                        if error:
+                            st.error(error)
+                        elif thread_list:
+                            # Store in session state
+                            st.session_state.threads = thread_list
+                            total_messages = sum(t['message_count'] for t in thread_list)
+                            st.success(f"Found {len(thread_list)} email threads containing {total_messages} total messages!")
+                        else:
+                            st.warning("No email threads found matching the specified filters.")
+                            
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+                    print(f"Error details: {traceback.format_exc()}")
+
+        # Display threads in selectbox for user selection (moved outside the fetch button block)
+        thread_options = []
+        thread_labels = {}
+        
+        if 'threads' in st.session_state and st.session_state.threads:
+            for thread in st.session_state.threads:
+                # Format as "[Subject] (Count: X emails)"
+                label = f"{thread['subject']} (Count: {thread['message_count']} emails)"
+                thread_labels[label] = thread
+                thread_options.append(label)
+            
+            selected_thread_label = st.selectbox(
+                "Select Email Thread to Process:",
+                options=thread_options,
+                index=0 if thread_options else None
             )
             
-            if has_results:
-                st.markdown("## Analysis Results")
-                individual_results = st.session_state.individual_results
+            if not selected_thread_label:
+                st.info("No threads available. Please fetch emails first.")
+            else:
+                # Get the selected thread object
+                selected_thread = thread_labels[selected_thread_label]
                 
-                # Create a thread overview at the top
-                thread_context = {
-                    "thread_id": individual_results[0].get("email", {}).get("conversationId", "Unknown"),
-                    "thread_subject": individual_results[0].get("email", {}).get("subject", "Unknown"),
-                    "email_count": len(individual_results),
-                    "date_range": {
-                        "start": individual_results[0].get("email", {}).get("receivedDateTime", "Unknown"),
-                        "end": individual_results[-1].get("email", {}).get("receivedDateTime", "Unknown")
-                    },
-                    "participants": set()
-                }
+                # Show thread details in a nice formatted box
+                st.markdown("### Thread Information")
                 
-                # Clean up the thread subject
-                thread_context["clean_subject"] = get_clean_subject(thread_context["thread_subject"])
-
-                # Collect participants
-                for result in individual_results:
-                    sender = result.get("email", {}).get("from", {}).get("emailAddress", {}).get("address", "")
-                    if sender:
-                        thread_context["participants"].add(sender)
-
-                # Show thread overview
-                st.markdown("### Thread Overview")
-                st.markdown(f"**Subject:** {thread_context['clean_subject']}")
-                st.markdown(f"**Number of Emails:** {thread_context['email_count']}")
-                st.markdown(f"**Date Range:** {thread_context['date_range']['start']} to {thread_context['date_range']['end']}")
-                st.markdown(f"**Participants:** {', '.join(thread_context['participants'])}")
-                st.markdown("---")
+                # Create two columns for thread info display
+                col1, col2 = st.columns(2)
                 
-                # Create tabs for each email
-                email_tabs = st.tabs([
-                    f"Email {idx+1}: {get_clean_subject(result.get('email', {}).get('subject', 'No Subject'))[:30]}..." 
-                    for idx, result in enumerate(individual_results)
-                ])
+                with col1:
+                    st.markdown(f"**Subject:** {selected_thread['subject']}")
+                    st.markdown(f"**Number of Emails:** {selected_thread['message_count']}")
                 
-                # Display each email in its own tab
-                for idx, (email_tab, result) in enumerate(zip(email_tabs, individual_results)):
-                    with email_tab:
-                        try:
-                            # Email metadata
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                email_data = result.get('email', {})
-                                sender = email_data.get('from', {}).get('emailAddress', {})
-                                sender_name = sender.get('name', 'Unknown')
-                                sender_email = sender.get('address', 'Unknown')
-                                subject = email_data.get('subject', 'No Subject')
+                with col2:
+                    st.markdown(f"**Thread ID:** {selected_thread['thread_id']}")
+                    st.markdown(f"**Latest Activity:** {selected_thread['latest_message_date']}")
+                
+                # Show list of emails in thread with subjects and dates in a table
+                if selected_thread.get('messages'):
+                    with st.expander("🔍 View Emails in Thread", expanded=False):
+                        if 'first_message' in selected_thread and 'latest_message' in selected_thread:
+                            # If we have the first and latest message objects, we can display them
+                            email_data = []
+                            
+                            # Add first message
+                            if isinstance(selected_thread['first_message'], dict):
+                                first_message = selected_thread['first_message']
+                                subject = first_message.get('subject', 'No Subject')
+                                clean_subject = get_clean_subject(subject)
+                                sender = first_message.get('from', {}).get('emailAddress', {})
                                 
-                                st.markdown(f"**From:** {sender_name} ({sender_email})")
-                                st.markdown(f"**Subject:** {subject}")
+                                email_data.append({
+                                    "Index": 1,
+                                    "Subject": clean_subject,
+                                    "From": sender.get('name', 'Unknown'),
+                                    "Email": sender.get('address', 'unknown@example.com'),
+                                    "Date": first_message.get('receivedDateTime', 'Unknown')
+                                })
                             
-                            with col2:
-                                sent_time = email_data.get('receivedDateTime', 'Unknown')
-                                total_emails = len(st.session_state.individual_results)
-                                st.markdown(f"**Sent:** {sent_time}")
-                                st.markdown(f"**Email {idx + 1} of {total_emails}**")
+                            # Add latest message if different from first
+                            if (isinstance(selected_thread['latest_message'], dict) and 
+                                selected_thread['latest_message'].get('id') != selected_thread['first_message'].get('id')):
+                                latest_message = selected_thread['latest_message']
+                                subject = latest_message.get('subject', 'No Subject')
+                                clean_subject = get_clean_subject(subject)
+                                sender = latest_message.get('from', {}).get('emailAddress', {})
+                                
+                                email_data.append({
+                                    "Index": 2,
+                                    "Subject": clean_subject,
+                                    "From": sender.get('name', 'Unknown'),
+                                    "Email": sender.get('address', 'unknown@example.com'),
+                                    "Date": latest_message.get('receivedDateTime', 'Unknown')
+                                })
                             
-                            # Display original email content (without using another expander)
-                            st.markdown("#### 📧 Original Email Content")
-                            if 'email' in result and 'body' in result['email'] and 'content' in result['email']['body']:
-                                content = result['email']['body']['content']
-                                st.code(clean_email_content(content), language=None)
+                            # Display available message info
+                            if email_data:
+                                emails_df = pd.DataFrame(email_data)
+                                st.dataframe(emails_df)
                             else:
-                                st.info("No email content available")
-                            
-                            # Display the three main sections: Input Data, AI Output, and Ground Truth
-                            col1, col2 = st.columns(2)
-                            
-                            with col1:
-                                st.markdown("### Input Data")
-                                if 'input_data' in result:
-                                    st.json(result['input_data'])
-                                else:
-                                    st.info("No input data available")
-                            
-                            with col2:
-                                st.markdown("### Ground Truth")
-                                if 'groundtruth' in result:
-                                    st.json(result['groundtruth'])
-                                else:
-                                    st.info("No ground truth data available")
-                            
-                            # Display AI Output
-                            st.markdown("### AI Output")
-                            if 'ai_output' in result:
-                                st.json(result['ai_output'])
+                                st.info("No detailed message information available. Process the thread to see all messages.")
+                        else:
+                            # Handle the case where we only have message IDs
+                            message_ids = selected_thread.get('messages', [])
+                            if isinstance(message_ids, list) and message_ids:
+                                st.info(f"Thread contains {len(message_ids)} messages. Process the thread to see details.")
                             else:
-                                st.info("No AI output available")
+                                st.info("No message details available. Process the thread to retrieve emails.")
+
+                # Process Thread button (moved outside the fetch block)
+                if st.button("Process Thread", type="primary"):
+                    with st.spinner("Loading and analyzing email thread..."):
+                        try:
+                            # Add clear debugging information about the thread
+                            print("\n==================================================")
+                            print("THREAD PROCESSING DEBUG INFORMATION")
+                            print("==================================================")
+                            print(f"Thread ID: {selected_thread['thread_id']}")
+                            print(f"Thread Subject (Original): {selected_thread['subject']}")
+                            print(f"Thread Subject (Clean): {selected_thread['subject']}")
+                            print(f"Thread Message Count: {selected_thread['message_count']}")
+                            print(f"Thread has conversation_ids: {'conversation_ids' in selected_thread}")
+                            if 'conversation_ids' in selected_thread:
+                                print(f"Thread conversation_ids: {selected_thread['conversation_ids']}")
+                            print("==================================================")
                             
+                            # --- MODIFIED SECTION for GraphAPIClient Instantiation ---
+                            client_id_to_use_process = st.session_state.get('ms_graph_client_id')
+                            client_secret_to_use_process = st.session_state.get('ms_graph_client_secret')
+                            tenant_id_to_use_process = st.session_state.get('ms_graph_tenant_id')
+
+                            if not all([client_id_to_use_process, client_secret_to_use_process, tenant_id_to_use_process]):
+                                st.error("MS Graph API credentials are not fully configured in settings for thread processing. Please check the sidebar.")
+                                st.stop()
+                            graph_client = GraphAPIClient(client_id_to_use_process, client_secret_to_use_process, tenant_id_to_use_process)
+                            # --- END MODIFIED SECTION ---
+                            access_token = graph_client.get_access_token()
+                        
+                            if not access_token:
+                                st.error('Failed to get access token. Check your credentials.')
+                            else:
+                                # ADD THIS CHECK HERE:
+                                current_user_email = st.session_state.get('user_email_address')
+                                if not current_user_email:
+                                    st.error("Processing halted: User Email is not configured in settings. Please check the sidebar.")
+                                    st.stop() 
+
+                                # Debug info about the thread
+                                print("\n=== Debug: Processing Thread ===")
+                                print(f"Thread ID: {selected_thread['thread_id']}")
+                                print(f"Expected message count: {selected_thread['message_count']}")
+                            
+                                # Clear any existing results
+                                st.session_state.individual_results = []
+                                st.session_state.has_results = False
+                                
+                                # Get thread messages - this should now include all emails in the normalized thread
+                                thread_emails = []
+                                try:
+                                    # Get the thread ID of the selected thread
+                                    thread_id = selected_thread['thread_id']
+                                    print(f"Retrieving all emails for thread ID: {thread_id}")
+                                    
+                                    # Check if we already have message IDs
+                                    message_ids = selected_thread.get('messages', [])
+                                    if message_ids and isinstance(message_ids, list):
+                                        print(f"Thread has {len(message_ids)} message IDs, fetching full messages")
+                                        thread_emails = []
+                                        
+                                        # Fetch each message by ID
+                                        for msg_id in message_ids:
+                                            try:
+                                                if isinstance(msg_id, str):
+                                                    # --- MODIFIED SECTION for user_email in _get_email_with_body ---
+                                                    user_email_for_fetch = st.session_state.get('user_email_address')
+                                                    if not user_email_for_fetch:
+                                                        print("Error: User email not found in session state for _get_email_with_body")
+                                                        # Potentially skip this message or handle error
+                                                        continue 
+                                                    full_msg = graph_client._get_email_with_body(user_email_for_fetch, msg_id)
+                                                    # --- END MODIFIED SECTION ---
+                                                    if full_msg:
+                                                        thread_emails.append(full_msg)
+                                            except Exception as e:
+                                                print(f"Error fetching message {msg_id}: {str(e)}")
+                                        
+                                        # Create a minimal thread structure
+                                        if thread_emails:
+                                            thread_structure = []
+                                            # Sort by date
+                                            thread_emails.sort(key=lambda e: e.get('receivedDateTime', ''))
+                                            # Add first email as root
+                                            if thread_emails:
+                                                root = thread_emails[0].copy()
+                                                root['replies'] = []
+                                                thread_structure.append(root)
+                                                # Add other emails as replies to root
+                                                for email in thread_emails[1:]:
+                                                    root['replies'].append(email)
+                                            
+                                            # Store thread structure
+                                            st.session_state.thread_structure = thread_structure
+                                    else:
+                                        # Try using the improved fetch_thread_messages method 
+                                        # if we don't have message IDs
+                                        # --- MODIFIED SECTION for user_email in fetch_thread_messages ---
+                                        user_email_for_thread_msgs = st.session_state.get('user_email_address')
+                                        if not user_email_for_thread_msgs:
+                                            st.error("User email not configured for fetching thread messages.")
+                                            st.stop()
+                                        thread_result = graph_client.fetch_thread_messages(user_email_for_thread_msgs, thread_id)
+                                        # --- END MODIFIED SECTION ---
+                                        
+                                        # Extract the messages and thread structure from the result
+                                        if isinstance(thread_result, dict):
+                                            thread_emails = thread_result.get('messages', [])
+                                            thread_structure = thread_result.get('thread_structure', [])
+                                            
+                                            if thread_emails:
+                                                print(f"Retrieved {len(thread_emails)} messages in thread")
+                                                
+                                                # Store thread structure for visualization
+                                                st.session_state.thread_structure = thread_structure
+                                            else:
+                                                print("No emails found in the thread result")
+                                        else:
+                                            print(f"Unexpected result type from fetch_thread_messages: {type(thread_result)}")
+                                            thread_emails = []
+                                            thread_structure = []
+                                    
+                                    # Check if we have any emails from the fetch operations
+                                    if not thread_emails:
+                                        print("No emails retrieved. Trying to use first_message and latest_message if available")
+                                        # Try using the first_message and latest_message if available
+                                        if isinstance(selected_thread.get('first_message'), dict):
+                                            first_msg = selected_thread['first_message']
+                                            if 'id' in first_msg and first_msg not in thread_emails:
+                                                thread_emails.append(first_msg)
+                                                
+                                            if isinstance(selected_thread.get('latest_message'), dict):
+                                                latest_msg = selected_thread['latest_message']
+                                                if 'id' in latest_msg and latest_msg not in thread_emails:
+                                                    # Check if this is not the same as first_message
+                                                    if not thread_emails or thread_emails[0].get('id') != latest_msg.get('id'):
+                                                        thread_emails.append(latest_msg)
+                            
+                                    # Verify thread emails is a list and contains valid elements
+                                    if not isinstance(thread_emails, list):
+                                        print(f"Error: thread_emails is not a list, it's a {type(thread_emails)}")
+                                        thread_emails = []
+                                    elif len(thread_emails) == 0:
+                                        print("Warning: No emails found in thread")
+                                    else:
+                                        print(f"Retrieved {len(thread_emails)} emails for processing")
+                                        # Debug print first email structure
+                                        print(f"First email keys: {list(thread_emails[0].keys())}")
+                        
+                                except Exception as e:
+                                    print(f"Error getting thread emails: {str(e)}")
+                                    import traceback
+                                    traceback.print_exc()
+                                
+                                if thread_emails:
+                                    # Sort emails by date
+                                    thread_emails.sort(key=lambda e: e.get('receivedDateTime', ''))
+                                    print(f"\nProcessing {len(thread_emails)} emails in thread")
+                                    
+                                    # Display thread structure if available
+                                    if 'thread_structure' in st.session_state:
+                                        with st.expander("📧 View Email Thread Structure"):
+                                            st.write("Thread structure based on message IDs and reply relationships:")
+                                            
+                                            def display_thread_node(node, level=0):
+                                                """Recursively display thread node with indentation"""
+                                                # Extract sender info and subject
+                                                sender = node.get('from', {}).get('emailAddress', {}).get('address', 'Unknown')
+                                                subject = node.get('subject', 'No Subject')
+                                                date = node.get('receivedDateTime', '').split('T')[0]
+                                                
+                                                # Display this message with proper indentation
+                                                st.markdown(f"{'&nbsp;' * (level * 4)}🔹 **{sender}** - {subject} ({date})")
+                                                
+                                                # Display all replies to this message
+                                                for reply in node.get('replies', []):
+                                                    display_thread_node(reply, level + 1)
+                                            
+                                            # Display each thread root
+                                            for root in st.session_state.thread_structure:
+                                                display_thread_node(root)
+                                    
+                                    # Show debug info about the emails
+                                    print("\nThread Email Details:")
+                                    for i, email in enumerate(thread_emails):
+                                        print(f"Email {i+1}:")
+                                        print(f"  Subject: {email.get('subject', 'No Subject')}")
+                                        print(f"  From: {email.get('from', {}).get('emailAddress', {}).get('address', 'Unknown')}")
+                                        print(f"  Date: {email.get('receivedDateTime', 'Unknown')}")
+                                        print(f"  Has body: {'body' in email and bool(email['body'].get('content'))}")
+                                    
+                                    # Process emails
+                                    results = []
+                                    previous_summary = ""
+                                    
+                                    progress_bar = st.progress(0)
+                                    status_text = st.empty()
+                                    error_placeholder = st.empty()
+                                    has_rate_limit_error = False
+                                    
+                                    for idx, email in enumerate(thread_emails):
+                                        progress = (idx + 1) / len(thread_emails)
+                                        progress_bar.progress(progress, text=f"Processing email {idx + 1} of {len(thread_emails)}...")
+                                        
+                                        print(f"\n=== Processing email {idx + 1} ===")
+                                        print(f"Subject: {email.get('subject', 'No Subject')}")
+                                        print(f"From: {email.get('from', {}).get('emailAddress', {}).get('address', 'Unknown')}")
+                                        print(f"Previous summary: {previous_summary[:100]}...")
+                                        
+                                        try:
+                                            # --- DEBUG PRINT ADDED ---
+                                            print(f"DEBUG: Email {idx+1} keys before body check: {list(email.keys()) if isinstance(email, dict) else 'Not a dict'}")
+                                            # --- END DEBUG PRINT ---
+                                            # Ensure email has required fields
+                                            if not email.get('body', {}).get('content'):
+                                                print(f"Warning: Email {idx + 1} has no body content initially. Attempting to fetch full email.")
+                                                # Try to get full email content
+                                                try:
+                                                    print(f"Fetching full email content for ID: {email['id']}")
+                                                    # --- MODIFIED SECTION for user_email in _get_email_with_body ---
+                                                    user_email_for_refetch = st.session_state.get('user_email_address')
+                                                    if not user_email_for_refetch:
+                                                        print("Error: User email not found in session state for re-fetching email body.")
+                                                    else:
+                                                        email = graph_client._get_email_with_body(user_email_for_refetch, email['id'])
+                                                    # --- END MODIFIED SECTION ---
+                                                    print(f"Successfully fetched full email content (or attempt made)")
+                                                except Exception as e:
+                                                    print(f"Error fetching full email: {str(e)}")
+                                        
+                                            # --- DEBUG PRINT ADDED ---
+                                            has_content = isinstance(email, dict) and email.get('body', {}).get('content')
+                                            print(f"DEBUG: Email {idx+1} - Final check for body content: {bool(has_content)}")
+                                            if not isinstance(email, dict):
+                                                print(f"DEBUG: Email {idx+1} is not a dict.")
+                                            elif not email.get('body'):
+                                                print(f"DEBUG: Email {idx+1} has no 'body' key.")
+                                            elif not email.get('body',{}).get('content'):
+                                                print(f"DEBUG: Email {idx+1} has 'body' but no 'content' or content is empty.")
+                                            # --- END DEBUG PRINT ---
+
+                                            if email and email.get('body', {}).get('content'):
+                                                # Process this individual email with the previous summary
+                                                print(f"Processing email {idx + 1} with context from previous emails")
+                                                print(f"Previous summary being used: {previous_summary}")
+                                                
+                                                # Initialize AI service with the Gemini API key
+                                                from ai_service import AIService
+                                                # For Dwellworks API, the API key is not required
+                                                # But for Gemini, we'll configure it with key from the sidebar
+                                                import google.generativeai as genai
+
+                                                # Fetch Gemini API key from session state
+                                                current_gemini_api_key = st.session_state.get("gemini_api_key")
+
+                                                if current_gemini_api_key:
+                                                    genai.configure(api_key=current_gemini_api_key)
+                                                    print("DEBUG: Configured genai with API key from session state for thread processing.")
+                                                else:
+                                                    print("DEBUG: Gemini API key not found in session state for thread processing. Genai not configured by this block.")
+                                                
+                                                ai_service = AIService() # AIService might have its own Gemini key handling
+                                                
+                                                result = process_individual_email(email, ai_service, previous_summary)
+                                                if result:
+                                                    print(f"Email {idx + 1} processed successfully")
+                                                    result["email_index"] = idx + 1
+                                                    results.append(result)
+                                                    
+                                                    # Extract summary for next email
+                                                    if isinstance(result.get("ai_output"), dict) and "Summary" in result["ai_output"]:
+                                                        previous_summary = result["ai_output"]["Summary"]
+                                                        print(f"Updated previous_summary to: {previous_summary}")
+                                                    else:
+                                                        print("Warning: Could not extract summary from AI output")
+                                                    
+                                                    if isinstance(result.get("ai_output"), dict) and result["ai_output"].get("error"):
+                                                        has_rate_limit_error = True
+                                                        print(f"Warning: Rate limit error in email {idx + 1}")
+                                            else:
+                                                print(f"Error: Could not get content for email {idx + 1}")
+                                            
+                                        except Exception as e:
+                                            print(f"Error processing email {idx + 1}: {str(e)}")
+                                            import traceback
+                                            traceback.print_exc()
+                                    
+                                    # Complete progress
+                                    progress_bar.empty()
+                                    status_text.empty()
+                                    
+                                    print("\n=== Results Summary ===")
+                                    print(f"Total emails processed: {len(results)}")
+                                    
+                                    # Store results using our helper function
+                                    if results:
+                                        print("\nAttempting to store results...")
+                                        ensure_results_tab_works(results)
+                                        
+                                        # Verify results were stored
+                                        if 'individual_results' in st.session_state and len(st.session_state.individual_results) > 0:
+                                            print("Results successfully stored in session state")
+                                            
+                                            if has_rate_limit_error:
+                                                error_placeholder.error("⚠️ Some emails could not be processed due to API rate limits. Results shown may be incomplete.")
+                                            else:
+                                                st.success(f"Successfully analyzed {len(results)} emails! View results in the 'Results & Reports' tab.")
+                                                
+                                                # Add a button to go to results tab
+                                                if st.button("Go to Results Tab"):
+                                                    st.session_state.active_tab = "Detailed Evaluation" # Corrected name
+                                                    st.experimental_rerun()
+                                        else:
+                                            print("Warning: Results may not have been stored properly")
+                                            st.error("Error: Results were not stored properly. Please try again.")
+                                    else:
+                                        st.error("No results to store. This may be due to missing User Email in settings or issues fetching email content.")
                         except Exception as e:
-                            st.error(f"Error displaying email {idx + 1}: {str(e)}")
-                            print(f"Error details for email {idx + 1}:")
+                            st.error(f"An error occurred while processing the thread: {e}")
                             import traceback
-                            traceback.print_exc()
-            
-            else:
-                st.info("No analysis results available. Please process emails first.")
-    else:
-        st.info("No threads available. Please fetch emails first.")
-
-# Add the calculate_similarity function before display_evaluation_metrics
-def calculate_similarity(text1, text2):
-    """Calculate similarity between two text strings using cosine similarity"""
-    if not text1 or not text2:
-        return 0.0
-    
-    # Tokenize and create sets of words
-    import re
-    words1 = set(re.findall(r'\b\w+\b', text1.lower()))
-    words2 = set(re.findall(r'\b\w+\b', text2.lower()))
-    
-    # Calculate Jaccard similarity (intersection over union)
-    intersection = len(words1.intersection(words2))
-    union = len(words1.union(words2))
-    
-    if union == 0:
-        return 0.0
-    
-    return intersection / union
-
-def display_formatted_json(data, title=None):
-    """
-    Display JSON data with proper formatting and styling
-    
-    Args:
-        data: The JSON data to display
-        title: Optional title to show above the JSON
-    """
-    if title:
-        st.markdown(f"### {title}")
-    
-    # Convert to JSON string if necessary
-    if not isinstance(data, str):
-        try:
-            json_str = json.dumps(data, indent=2)
-        except Exception as e:
-            st.error(f"Error formatting JSON: {str(e)}")
-            return
-    else:
-        json_str = data
-    
-    # Display using st.json for clean formatting
-    st.json(data)
-
-def highlight_status(val):
-    """Helper function to highlight Pass/Fail/Partial Pass status with colors"""
-    if val == 'Pass':
-        return 'background-color: #008000; color: white'
-    elif val == 'Fail':
-        return 'background-color: #FF0000; color: white'
-    elif val == 'Partial Pass':
-        return 'background-color: #FFA500; color: black'
-    elif val == 'Info':
-        return 'background-color: #A9A9A9; color: white'
-    else:
-        return ''
-
-def display_evaluation_metrics(result):
-    """Display evaluation metrics in a structured way"""
-    try:
-        # Extract data from result
-        ai_output = result.get('ai_output', {})
-        groundtruth = result.get('groundtruth', {})
-        metrics = result.get('metrics', [])
-        
-        if not ai_output:
-            st.error("No AI output available to evaluate")
-            return
-            
-        # Display email summary for context
-        with st.expander("📝 Email Summary", expanded=True):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("### 📊 AI Output")
-                ai_summary = ai_output.get('Summary', 'No summary available')
-                st.info(ai_summary)
+                            print("Error details:")
+                            print(traceback.format_exc())
                 
-            with col2:
-                st.markdown("### 🎯 Ground Truth")
-                gt_summary = groundtruth.get('Summary', 'No ground truth available')
-                st.success(gt_summary)
+                # Display results in an expander if available
+                has_results = (
+                    'individual_results' in st.session_state 
+                    and isinstance(st.session_state.individual_results, list)
+                    and len(st.session_state.individual_results) > 0
+                )
                 
-            # Show evaluation error if present
-            if 'evaluation_error' in result and result['evaluation_error']:
-                st.error(f"Evaluation Error: {result['evaluation_error']}")
-        
-        # If no metrics but evaluation error exists, we should generate fallback metrics
-        if not metrics and result.get('evaluation_error') and ai_output and groundtruth:
-            print("Generating fallback metrics from evaluation error")
-            try:
-                from evaluation_engine import generate_fallback_metrics
-                metrics = generate_fallback_metrics(ai_output, groundtruth)
-                print(f"Generated {len(metrics)} fallback metrics")
-            except Exception as e:
-                print(f"Error generating fallback metrics: {str(e)}")
-        
-        # Group metrics by type
-        summary_metrics = []
-        sentiment_metrics = []
-        feature_metrics = []
-        event_metrics = []
-        
-        for metric in metrics:
-            metric_name = metric.get('Metric', metric.get('Field', '')).lower()
-            
-            if 'summary' in metric_name:
-                summary_metrics.append(metric)
-            elif 'sentiment' in metric_name:
-                sentiment_metrics.append(metric)
-            elif any(x in metric_name for x in ['feature', 'category']):
-                feature_metrics.append(metric)
-            elif 'event' in metric_name:
-                event_metrics.append(metric)
-        
-        # Helper function to render metrics in the desired table format
-        def render_metric_display_table(metric_dict, metric_name_for_title):
-            import pandas as pd
-            import streamlit as st
-            st.subheader(metric_name_for_title.replace("_", " ").title())
+                if has_results:
+                    st.markdown("## Analysis Results")
+                    individual_results = st.session_state.individual_results
+                    
+                    # Create a thread overview at the top
+                    thread_context = {
+                        "thread_id": individual_results[0].get("email", {}).get("conversationId", "Unknown"),
+                        "thread_subject": individual_results[0].get("email", {}).get("subject", "Unknown"),
+                        "email_count": len(individual_results),
+                        "date_range": {
+                            "start": individual_results[0].get("email", {}).get("receivedDateTime", "Unknown"),
+                            "end": individual_results[-1].get("email", {}).get("receivedDateTime", "Unknown")
+                        },
+                        "participants": set()
+                    }
+                    
+                    # Clean up the thread subject
+                    thread_context["clean_subject"] = get_clean_subject(thread_context["thread_subject"])
 
-            table_data = []
-            ai_value = metric_dict.get("AI Value", "N/A")
-            gt_value = metric_dict.get("Ground Truth", "N/A")
+                    # Collect participants
+                    for result in individual_results:
+                        sender = result.get("email", {}).get("from", {}).get("emailAddress", {}).get("address", "")
+                        if sender:
+                            thread_context["participants"].add(sender)
 
-            # --- START EVENT HANDLING ---
-            # If it's event data and the value is a list or dict, convert to JSON string for display
-            if "event" in metric_name_for_title.lower():
-                if isinstance(ai_value, (list, dict)):
-                    try:
-                        ai_value = json.dumps(ai_value, indent=2)
-                    except Exception:
-                        ai_value = str(ai_value) # Fallback to string conversion
-                if isinstance(gt_value, (list, dict)):
-                    try:
-                        gt_value = json.dumps(gt_value, indent=2)
-                    except Exception:
-                        gt_value = str(gt_value) # Fallback to string conversion
-            # --- END EVENT HANDLING ---
-            
-            # Always add AI Value and Ground Truth (potentially formatted)
-            table_data.append({"Metric": "AI Value", "Value": ai_value})
-            table_data.append({"Metric": "Ground Truth", "Value": gt_value})
-
-            # Add Similarity Percentage ONLY for Summary metric
-            if metric_name_for_title.lower() == "summary":
-                similarity_val = metric_dict.get("Similarity Percentage", metric_dict.get("Similarity")) # Check both keys
-                # Basic formatting to ensure it looks like a percentage string
-                if isinstance(similarity_val, (int, float)):
-                     similarity_val = f"{similarity_val:.0%}"
-                elif isinstance(similarity_val, str) and "%" not in similarity_val:
-                     try:
-                         similarity_float = float(similarity_val)
-                         similarity_val = f"{similarity_float:.0%}"
-                     except ValueError:
-                         pass # Keep string as is if conversion fails
-                table_data.append({"Metric": "Similarity Percentage", "Value": similarity_val if similarity_val is not None else "N/A"})
-
-            # Add Pass/Fail Status
-            table_data.append({"Metric": "Pass/Fail", "Value": metric_dict.get("Status", "N/A")})
-            
-            # Add Ground Truth Explanation (Mandatory - should not be N/A from LLM)
-            table_data.append({"Metric": "Ground Truth Explanation", "Value": metric_dict.get("Ground Truth Explanation", "Explanation missing from LLM")})
-            
-            # Add Pass/Fail or % Explanation
-            explanation_key = "% Explanation" if metric_name_for_title.lower() == "summary" else "Pass/Fail Explanation"
-            explanation_value = metric_dict.get(explanation_key, metric_dict.get("Pass/Fail Explanation", metric_dict.get("Comparison Explanation", "Explanation missing from LLM")))
-            table_data.append({"Metric": explanation_key, "Value": explanation_value})
-            
-            df = pd.DataFrame(table_data)
-            print(f"DEBUG render_metric_display_table: Constructed DataFrame for '{metric_name_for_title}':\n{df.to_string()}")
-            
-            st.table(df.set_index("Metric"))
-
-        # 1. SENTIMENT ANALYSIS EVALUATION - in an expander
-        with st.expander("📊 SENTIMENT ANALYSIS EVALUATION", expanded=True):
-            sentiment_actual_metric = next((m for m in sentiment_metrics if m.get('Metric', m.get('Field', '')).strip().lower() == 'sentiment analysis'), None)
-            overall_sentiment_metric = next((m for m in sentiment_metrics if m.get('Metric', m.get('Field', '')).strip().lower() == 'overall_sentiment_analysis'), None)
-            
-            if sentiment_actual_metric:
-                render_metric_display_table(sentiment_actual_metric, "Sentiment Analysis")
-            else:
-                st.info("No Sentiment Analysis (red/green) metrics available.")
+                    # Show thread overview
+                    st.markdown("### Thread Overview")
+                    st.markdown(f"**Subject:** {thread_context['clean_subject']}")
+                    st.markdown(f"**Number of Emails:** {thread_context['email_count']}")
+                    st.markdown(f"**Date Range:** {thread_context['date_range']['start']} to {thread_context['date_range']['end']}")
+                    st.markdown(f"**Participants:** {', '.join(thread_context['participants'])}")
+                    st.markdown("---")
+                    
+                    # Create tabs for each email
+                    email_tabs = st.tabs([
+                        f"Email {idx+1}: {get_clean_subject(result.get('email', {}).get('subject', 'No Subject'))[:30]}..." 
+                        for idx, result in enumerate(individual_results)
+                    ])
+                    
+                    # Display each email in its own tab
+                    for idx, (email_tab, result) in enumerate(zip(email_tabs, individual_results)):
+                        with email_tab:
+                            try:
+                                # Email metadata
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    email_data = result.get('email', {})
+                                    sender = email_data.get('from', {}).get('emailAddress', {})
+                                    sender_name = sender.get('name', 'Unknown')
+                                    sender_email = sender.get('address', 'Unknown')
+                                    subject = email_data.get('subject', 'No Subject')
+                                    
+                                    st.markdown(f"**From:** {sender_name} ({sender_email})")
+                                    st.markdown(f"**Subject:** {subject}")
+                                
+                                with col2:
+                                    sent_time = email_data.get('receivedDateTime', 'Unknown')
+                                    total_emails = len(st.session_state.individual_results)
+                                    st.markdown(f"**Sent:** {sent_time}")
+                                    st.markdown(f"**Email {idx + 1} of {total_emails}**")
+                                
+                                # Display original email content (without using another expander)
+                                st.markdown("#### 📧 Original Email Content")
+                                if 'email' in result and 'body' in result['email'] and 'content' in result['email']['body']:
+                                    content = result['email']['body']['content']
+                                    st.code(clean_email_content(content), language=None)
+                                else:
+                                    st.info("No email content available")
+                                
+                                # Display the three main sections: Input Data, AI Output, and Ground Truth
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    st.markdown("### Input Data")
+                                    if 'input_data' in result:
+                                        st.json(result['input_data'])
+                                    else:
+                                        st.info("No input data available")
+                                
+                                with col2:
+                                    st.markdown("### Ground Truth")
+                                    if 'groundtruth' in result:
+                                        st.json(result['groundtruth'])
+                                    else:
+                                        st.info("No ground truth data available")
+                                
+                                # Display AI Output
+                                st.markdown("### AI Output")
+                                if 'ai_output' in result:
+                                    st.json(result['ai_output'])
+                                else:
+                                    st.info("No AI output available")
+                                
+                            except Exception as e:
+                                st.error(f"Error displaying email {idx + 1}: {str(e)}")
+                                print(f"Error details for email {idx + 1}:")
+                                import traceback
+                                traceback.print_exc()
                 
-            if overall_sentiment_metric:
-                render_metric_display_table(overall_sentiment_metric, "Overall Sentiment Analysis")
-            else:
-                st.info("No Overall Sentiment Analysis (positive/negative/neutral) metrics available.")
-            
-            if not sentiment_actual_metric and not overall_sentiment_metric:
-                st.info("No sentiment analysis metrics available for this email.")
-
-        # 2. FEATURE & CATEGORY EVALUATION - in an expander
-        with st.expander("🔍 FEATURE & CATEGORY EVALUATION", expanded=True):
-            feature_metric = next((m for m in feature_metrics if m.get('Metric', m.get('Field', '')).strip().lower() == 'feature'), None)
-            category_metric = next((m for m in feature_metrics if m.get('Metric', m.get('Field', '')).strip().lower() == 'category'), None)
-
-            if feature_metric:
-                render_metric_display_table(feature_metric, "Feature")
-            else:
-                st.info("No Feature metrics available.")
-
-            if category_metric:
-                render_metric_display_table(category_metric, "Category")
-            else:
-                st.info("No Category metrics available.")
-
-            if not feature_metric and not category_metric:
-                st.info("No feature or category metrics available for this email.")
-            
-            # Add feature classification matrix as reference - this can stay as is or be removed if too cluttered
-            # st.markdown("### Feature Classification Matrix Reference")
-            # feature_matrix = pd.DataFrame([...]) # Definition from existing code
-            # st.dataframe(feature_matrix)
-
-        # 3. EVENT DETECTION EVALUATION - in an expander
-        with st.expander("🗓️ EVENT DETECTION EVALUATION", expanded=True):
-            # Try to find an overall event metric first (e.g., Event Match, Events_count, or just Events)
-            event_summary_metric = next((m for m in event_metrics if m.get('Metric', m.get('Field', '')).strip().lower() in ['event match', 'events_count', 'events']), None)
-            
-            if event_summary_metric:
-                # Adjust AI/Ground Truth value if it's a count for display
-                # The user example shows count for AI Value and Ground Truth for events
-                ai_val = event_summary_metric.get("AI Value", "N/A")
-                gt_val = event_summary_metric.get("Ground Truth", "N/A")
-                
-                # If values look like counts (e.g., "1 events detected"), extract the number
-                if isinstance(ai_val, str) and "events detected" in ai_val.lower():
-                    ai_val_display = ai_val.lower().split(" ")[0]
                 else:
-                    ai_val_display = ai_val
-
-                if isinstance(gt_val, str) and "events" in gt_val.lower(): # Ground truth might be like "1 events" or "1 events in groundtruth"
-                    gt_val_display = gt_val.lower().split(" ")[0]
-                else:
-                    gt_val_display = gt_val
-                
-                # Create a copy to modify for display without affecting original dict
-                display_metric_dict = event_summary_metric.copy()
-                display_metric_dict["AI Value"] = ai_val_display
-                display_metric_dict["Ground Truth"] = gt_val_display
-                
-                render_metric_display_table(display_metric_dict, "Event Detection")
-                
-                # Display individual event field details if they exist and are separate metrics
-                # This part might need adjustment based on how event_metrics_list is structured
-                # For now, focusing on the main table as per user's primary example
-
-            else:
-                st.info("No event detection summary metrics available for this email.")
-
-        # 4. SUMMARY EVALUATION - in an expander
-        with st.expander("📝 SUMMARY EVALUATION", expanded=True):
-            summary_metric = next((m for m in summary_metrics if m.get('Metric', m.get('Field', '')).strip().lower() == 'summary'), None)
-            
-            if summary_metric:
-                render_metric_display_table(summary_metric, "Summary")
-            else:
-                st.info("No summary evaluation metrics available for this email.")
-        
-    except Exception as e:
-        st.error(f"Error displaying evaluation metrics: {str(e)}")
-        logging.exception("Error in display_evaluation_metrics")
+                    st.info("No analysis results available. Please process emails first.")
 
 def evaluate_results(ai_output, groundtruth=None):
     """
