@@ -1960,8 +1960,8 @@ if selected_option == "Upload emails as Excel":
         # Show preview of file before processing
         try:
             preview_df = pd.read_excel(uploaded_file, nrows=3)
-            st.write("Preview of uploaded file:")
-            st.dataframe(preview_df)
+            # st.write("Preview of uploaded file:")
+            # st.dataframe(preview_df)
             
             # Check if 'Email Content' column exists
             if "Email Content" not in preview_df.columns:
