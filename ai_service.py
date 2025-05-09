@@ -66,7 +66,7 @@ class AIService:
             "file_name": [],
             "email": sender_email,
             "mail_time": email.get("receivedDateTime", ""),
-            "body_type": email.get("body", {}).get("contentType", ""),
+            "body_type": "html",
             "mail_body": cleaned_body,
             "thread_id": email.get("conversationId", ""),
             "mail_summary": previous_summary
@@ -124,7 +124,7 @@ class AIService:
             "file_name": [],
             "email": email_content.get("sender", {}).get("emailAddress", {}).get("address", ""),
             "mail_time": email_content.get("receivedDateTime", ""),
-            "body_type": email_content.get("body", {}).get("contentType", ""),
+            "body_type": "html",
             "mail_body": email_content.get("body", {}).get("content", "").replace("\\n", "\n"),
             "thread_id": email_content.get("conversationId", ""),
             "mail_summary": previous_summary
@@ -419,23 +419,23 @@ class AIService:
             Return your analysis as a valid JSON object with these fields:
             
             ```json
-            {
+            {{
                 "sentiment_analysis": "positive|negative|neutral",
                 "overall_sentiment_analysis": "positive|negative|neutral", 
                 "feature": "EMAIL -- DSC First Contact with EE Completed|EMAIL -- EE First Contact with DSC|EMAIL -- Phone Consultation Scheduled|EMAIL -- Phone Consultation Completed|No feature",
                 "category": "Initial Service Milestones|No category",
                 "Events": [
-                    {
+                    {{
                         "Event name": "string or null",
                         "Date": "string or null",
                         "Time": "string or null",
                         "Property Type": "string or null",
                         "Agent Name": "string or null",
                         "Location": "string or null"
-                    }
+                    }}
                 ],
                 "Summary": "1-2 sentence summary of the email"
-            }
+            }}
             ```
             
             Ensure your analysis precisely follows the required format and classification matrix.
