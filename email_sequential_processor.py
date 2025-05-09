@@ -45,7 +45,7 @@ def process_thread_emails(thread_emails):
                 "file_name": [],
                 "email": email.get("sender", {}).get("emailAddress", {}).get("address", ""),
                 "mail_time": email.get("receivedDateTime", ""),
-                "body_type": email.get("body", {}).get("contentType", ""),
+                "body_type": "html",
                 "mail_body": email.get("body", {}).get("content", ""),
                 "thread_id": email.get("conversationId", ""),
                 "mail_summary": previous_summary

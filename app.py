@@ -632,7 +632,7 @@ def format_input_data(email):
             "file_name": [],
             "email": sender_email,
             "mail_time": received_time,
-            "body_type": "plain",
+            "body_type": "html",
             "mail_body": cleaned_content,
             "thread_id": thread_id,
             "mail_summary": ""
@@ -649,7 +649,7 @@ def format_input_data(email):
             "file_name": [],
             "email": email.get("from", {}).get("emailAddress", {}).get("address", "unknown@example.com"),
             "mail_time": email.get("receivedDateTime", ""),
-            "body_type": "plain",
+            "body_type": "html",
             "mail_body": "",
             "thread_id": email.get("conversationId", "unknown"),
             "mail_summary": ""
