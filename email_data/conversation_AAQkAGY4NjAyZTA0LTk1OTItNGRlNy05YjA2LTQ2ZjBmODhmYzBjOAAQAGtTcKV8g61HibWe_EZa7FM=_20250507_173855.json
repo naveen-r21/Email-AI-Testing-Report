@@ -1,0 +1,30 @@
+[
+  {
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('naveen.r%40optisolbusiness.com')/messages(id,subject,sender,receivedDateTime,body,bodyPreview,toRecipients,ccRecipients,conversationId)/$entity",
+    "@odata.etag": "W/\"CQAAABYAAAAJREVxpEjaR6rlPX130UHHAAMilEsG\"",
+    "id": "AAMkAGY4NjAyZTA0LTk1OTItNGRlNy05YjA2LTQ2ZjBmODhmYzBjOABGAAAAAAAPyAnfiIHNTobEvA2XT61JBwAJREVxpEjaR6rlPX130UHHAAAAAAEMAAAJREVxpEjaR6rlPX130UHHAAMlC8EcAAA=",
+    "receivedDateTime": "2025-03-21T18:37:12Z",
+    "subject": "Re: Request for House Visit \u2013 California",
+    "bodyPreview": "Dear Naveen\r\n\r\nThank you for your request. Your visit to the luxury apartment in California on 02/20/2025 at 10 AM has been confirmed. However, due to a double booking error, we regret to inform you that the property is no longer available at that time.",
+    "conversationId": "AAQkAGY4NjAyZTA0LTk1OTItNGRlNy05YjA2LTQ2ZjBmODhmYzBjOAAQAGtTcKV8g61HibWe_EZa7FM=",
+    "body": {
+      "contentType": "html",
+      "content": "<html><head>\r\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"><meta name=\"Generator\" content=\"Microsoft Word 15 (filtered medium)\"><style>\r\n<!--\r\n@font-face\r\n\t{font-family:\"Cambria Math\"}\r\n@font-face\r\n\t{font-family:Calibri}\r\n@font-face\r\n\t{font-family:Aptos}\r\n@font-face\r\n\t{font-family:\"Aptos Narrow\"}\r\np.MsoNormal, li.MsoNormal, div.MsoNormal\r\n\t{margin:0cm;\r\n\tfont-size:11.0pt;\r\n\tfont-family:\"Calibri\",sans-serif}\r\nspan.EmailStyle21\r\n\t{font-family:\"Calibri\",sans-serif;\r\n\tcolor:windowtext}\r\n.MsoChpDefault\r\n\t{font-size:11.0pt}\r\n@page WordSection1\r\n\t{margin:72.0pt 72.0pt 72.0pt 72.0pt}\r\ndiv.WordSection1\r\n\t{}\r\n-->\r\n</style></head><body lang=\"EN-IN\" link=\"#0563C1\" vlink=\"#954F72\" style=\"word-wrap:break-word\"><div class=\"WordSection1\"><p class=\"MsoNormal\"><span style=\"font-family:&quot;Aptos Narrow&quot;,sans-serif; color:black\">Dear Naveen<br><br>Thank you for your request. Your visit to the luxury apartment in California on 02/20/2025 at 10 AM has been confirmed. However, due to a double booking error, we regret to inform you that the property is no longer available at that time.<br><br>Best,<br>Kumar</span></p><p class=\"MsoNormal\"><span style=\"\">&nbsp;</span></p><p class=\"MsoNormal\"><span style=\"\">&nbsp;</span></p><div id=\"mail-editor-reference-message-container\"><div><div><div style=\"border:none; border-top:solid #B5C4DF 1.0pt; padding:3.0pt 0cm 0cm 0cm\"><p class=\"MsoNormal\" style=\"margin-bottom:12.0pt\"><b><span style=\"font-size:12.0pt; font-family:&quot;Aptos&quot;,sans-serif; color:black\">From: </span></b><span style=\"font-size:12.0pt; font-family:&quot;Aptos&quot;,sans-serif; color:black\">Naveen Kumar R &lt;naveen.r@optisolbusiness.com&gt;<br><b>Date: </b>Saturday, 22 March 2025 at 12:05</span><span style=\"font-size:12.0pt; font-family:&quot;Arial&quot;,sans-serif; color:black\">\u202f</span><span style=\"font-size:12.0pt; font-family:&quot;Aptos&quot;,sans-serif; color:black\">AM<br><b>To: </b>Naveenkumar Raman &lt;nraman@dwellworks.com&gt;<br><b>Subject: </b>Request for House Visit \u2013 California</span></p></div><div style=\"border:solid #C7C414 1.0pt; padding:2.0pt 2.0pt 2.0pt 2.0pt\"><p class=\"MsoNormal\" style=\"line-height:12.0pt; background:#FCF803\"><b><span style=\"font-size:10.0pt; color:black\">CAUTION:</span></b><span style=\"font-size:10.0pt; color:black\"> This email originated from outside of the organization. Do not click links or open attachments unless you recognize the sender and know the content is safe.</span></p></div><p class=\"MsoNormal\"><span style=\"font-size:12.0pt; font-family:&quot;Aptos&quot;,sans-serif\">&nbsp;</span></p><div><div><p class=\"MsoNormal\"><span style=\"font-family:&quot;Aptos Narrow&quot;,sans-serif; color:black\">Dear Kumar,<br><br>I would like to schedule a visit for a luxury apartment in California on 02/20/2025. Please confirm availability.<br><br>Best,<br>Naveen</span></p><p class=\"MsoNormal\">&nbsp;</p></div><p class=\"MsoNormal\"><span style=\"font-size:12.0pt; font-family:&quot;Aptos&quot;,sans-serif\">&nbsp; <i></i></span></p><p><i><span style=\"font-size:11.0pt; font-family:&quot;Calibri&quot;,sans-serif; color:gray\">Disclaimer:This message is a private communication. This message and all attachments are a private communication sent and may be confidential or protected by privilege. If you are not the intended recipient, you are hereby notified that any disclosure, copying, distribution or use of the information contained in or attached to this message is strictly prohibited. Please notify the sender of the delivery error by replying to this message, and then delete it from your system. Thank you.</span></i></p></div></div></div></div></div>&nbsp; <i><p style=\"font-size:14.5px; color:Gray; font-family:calibri\">Disclaimer:This message is a private communication. This message and all attachments are a private communication sent and may be confidential or protected by privilege. If you are not the intended recipient, you are hereby notified that any disclosure, copying, distribution or use of the information contained in or attached to this message is strictly prohibited. Please notify the sender of the delivery error by replying to this message, and then delete it from your system. Thank you.</p></i></body></html>"
+    },
+    "sender": {
+      "emailAddress": {
+        "name": "Naveenkumar Raman",
+        "address": "nraman@dwellworks.com"
+      }
+    },
+    "toRecipients": [
+      {
+        "emailAddress": {
+          "name": "Naveen Kumar R",
+          "address": "naveen.r@optisolbusiness.com"
+        }
+      }
+    ],
+    "ccRecipients": []
+  }
+]
