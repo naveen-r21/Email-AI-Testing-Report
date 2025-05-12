@@ -1937,7 +1937,7 @@ selected_option = st.radio(
 # Update session state and force rerun if selection changed
 if selected_option != st.session_state.email_source:
     st.session_state.email_source = selected_option
-    st.experimental_rerun()  # Force a rerun to update the UI
+    st.rerun()  # Force a rerun to update the UI
 
 # Separator
 st.markdown("---")
